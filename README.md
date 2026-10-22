@@ -19,6 +19,9 @@ DeepSeek Harness（Windows）**模型请求反复失败**的诊断工具与一�
 DeepSeek Messages transport failed
 已重试模型请求 (5/5)
 ```
+<img width="1186" height="1196" alt="image" src="https://github.com/user-attachments/assets/b32a7e21-0588-4791-8585-3f3bac078e17" />
+
+
 
 特征（抓住这几条就能少走很多弯路）：
 
