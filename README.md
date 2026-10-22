@@ -11,6 +11,62 @@ DeepSeek Harness（Windows）**模型请求反复失败**的诊断工具与一�
 
 ---
 
+## 快速开始
+
+看到 `DeepSeek Messages transport failed`，**先做这三件事**。不要先改配置、不要重装、不要清缓存——
+这些都被验证过无效（原因见第 3 节）。
+
+### ① 拿到工具
+
+```powershell
+git clone https://github.com/Hexiaodong66/deepseek-harness-transport-failed.git
+cd deepseek-harness-transport-failed
+```
+
+不需要管理员权限，也不需要预装 Node（脚本会优先用 Harness 自带的运行时）。
+
+### ② 只读体检（几秒出结果，什么都不改）
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Set-DshProxy.ps1 -DryRun
+```
+
+这条命令**只探测**：不写文件、不改 `.env`、不启动程序。正常输出长这样：
+
+```
+=== 探测可用代理端口 ===
+候选：33210, 7897, 7890, 10808
+  OK   33210   215ms   CONNECT 200 → HTTP 401
+  FAIL 7897      1ms   tcp: ECONNREFUSED
+选中端口：33210（CONNECT 200 → HTTP 401，215 ms）
+.env 已是正确端口，无需改动。
+```
+
+怎么读这张表：
+
+| 你看到的 | 说明 | 下一步 |
+| --- | --- | --- |
+| 有 `OK` + `HTTP 401` | 代理链路正常。**401 是"传输成功"的证据**——不带凭据发请求，能拿到 401 说明 TCP、隧道、TLS、HTTP 全通 | 不是代理问题，用第 6 节的表继续判层 |
+| 全是 `tcp: ECONNREFUSED` | 端口没人监听：`.env` 里写的端口和代理工具实际端口不一致，或工具没启动 | 见第 3 节；或直接运行**不带** `-DryRun` 的同一脚本，让它自动改正 |
+| `connect: CONNECT 405` | 命中了 SOCKS 端口而不是 HTTP 端口 | 换成混合（mixed）端口 |
+| `connect: CONNECT 407` | 代理要求认证 | 改用带账号密码的代理地址 |
+| `tls: CERT_*` | 代理在做 TLS 中间人 | 安装该代理的根证书，**不要**关闭证书校验 |
+
+### ③ 需要证据时：一键生成脱敏报告
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Start-DshDiag.ps1   # 带着采集钩子启动
+# 在界面里复现一次故障，然后：
+powershell -ExecutionPolicy Bypass -File .\Report-DshDiag.ps1
+```
+
+报告会给出"失败发生在哪一层 + 底层错误码"，并且**可以直接分享**：URL 去掉查询串、请求头只保留名称、
+响应正文从不读取。
+
+> 到这里就能定位大部分情况了。下面从第 1 节开始才是完整原理与证据链。
+
+---
+
 ## 1. 症状
 
 界面上反复出现：
@@ -107,6 +163,7 @@ DeepSeek Messages transport failed
 | `Set-DshProxy.ps1` | 自动探测当前可用端口 → 修正 `$DSH_HOME\.env` → 启动（适合多代理工具切换） |
 | `Start-DshDiag.ps1` | 环境快照 + 注入钩子 + 启动 |
 | `Watch-DshTransport.ps1` | 常驻观测，首次失败即高亮 |
+| `Report-DshDiag.ps1` | 一键把采集结果汇总成可分享的脱敏报告（自动定位 Node 与日志目录） |
 
 安装目录、`$DSH_HOME` 都是自动探测的；也可用 `-InstallDir` 或 `DSH_INSTALL_DIR` 指定。
 
@@ -131,7 +188,7 @@ powershell -ExecutionPolicy Bypass -File .\Set-DshProxy.ps1 -DryRun
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Start-DshDiag.ps1
 # 在界面里复现，然后：
-& "<Harness 自带 node>" .\bin\report.cjs --logs .\logs
+powershell -ExecutionPolicy Bypass -File .\Report-DshDiag.ps1
 ```
 
 ### 5.3 不改启动方式也能观测
